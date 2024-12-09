@@ -16,6 +16,8 @@ type Context struct {
 	Path       string            //请求路径
 	Params     map[string]string //请求路经的参数
 	StatusCode int               //状态码
+	Handlers   []HandlerFunc     //中间件->业务逻辑->中间件
+	index      int
 }
 
 func (c *Context) Param(key string) string {
@@ -29,6 +31,15 @@ func newContext(w http.ResponseWriter, req *http.Request) *Context {
 		Req:    req,
 		Method: req.Method,
 		Path:   req.URL.Path,
+		index:  -1,
+	}
+}
+
+func (c *Context) Next() {
+	c.index++
+	s := len(c.Handlers)
+	for ; c.index < s; c.index++ {
+		c.Handlers[c.index](c)
 	}
 }
 
@@ -50,7 +61,7 @@ func (c *Context) Status(code int) {
 
 // SetHeader 设置响应头
 func (c *Context) SetHeader(key string, value string) {
-	c.Writer.Header()
+	c.Writer.Header().Set(key, value)
 }
 
 // String 返回字符串

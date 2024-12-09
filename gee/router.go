@@ -78,9 +78,12 @@ func (r *router) handle(c *Context) {
 	n, params := r.getRoute(c.Method, c.Path)
 	if n != nil {
 		c.Params = params
-		key := c.Method + "-" + n.pattern //为路径匹配路由用于获取处理方法
-		r.handlers[key](c)
+		key := c.Method + "-" + n.pattern                //为路径匹配路由用于获取处理方法
+		c.Handlers = append(c.Handlers, r.handlers[key]) //将匹配到的核心业务逻辑加入到handlers数组
 	} else {
-		c.String(http.StatusNotFound, "404 NOT FOUND: %s\n", c.Path)
+		c.Handlers = append(c.Handlers, func(c *Context) {
+			c.String(http.StatusNotFound, "404 NOT FOUND: %s\n", c.Path)
+		})
 	}
+	c.Next() //开始调用中间件链
 }

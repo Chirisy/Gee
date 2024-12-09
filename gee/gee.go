@@ -3,6 +3,7 @@ package gee
 import (
 	"log"
 	"net/http"
+	"strings"
 )
 
 // HandlerFunc 定义了一个函数类型, 用于代表处理HTTP请求的方法
@@ -25,7 +26,14 @@ type Engine struct {
 // 受到请求时, 会根据请求路径查找路由映射表 router, 如果查到, 就执行注册的处理方法; 查不到, 就返回 404 NOT FOUND
 // 实现后, Engine 就可以作为一个 HTTP 服务端被启动
 func (e *Engine) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
+	var middlewares []HandlerFunc
+	for _, group := range e.groups {
+		if strings.HasPrefix(request.URL.Path, group.prefix) {
+			middlewares = append(middlewares, group.middlewares...)
+		}
+	}
 	var c = newContext(writer, request)
+	c.Handlers = middlewares
 	e.router.handle(c)
 }
 
@@ -48,6 +56,10 @@ func (group *RouteGroup) Group(prefix string) *RouteGroup {
 	//加入分组数组
 	group.engine.groups = append(group.engine.groups, newGroup)
 	return newGroup
+}
+
+func (group *RouteGroup) Use(middlewares ...HandlerFunc) {
+	group.middlewares = append(group.middlewares, middlewares...)
 }
 
 func (group *RouteGroup) addRoute(method string, comp string, handler HandlerFunc) {
