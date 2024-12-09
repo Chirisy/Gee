@@ -12,9 +12,15 @@ type Context struct {
 	// origin objects
 	Writer     http.ResponseWriter
 	Req        *http.Request
-	Method     string //请求方式
-	Path       string //请求路径
-	StatusCode int    //状态码
+	Method     string            //请求方式
+	Path       string            //请求路径
+	Params     map[string]string //请求路经的参数
+	StatusCode int               //状态码
+}
+
+func (c *Context) Param(key string) string {
+	value, _ := c.Params[key]
+	return value
 }
 
 func newContext(w http.ResponseWriter, req *http.Request) *Context {

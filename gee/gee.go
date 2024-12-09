@@ -1,55 +1,67 @@
 package gee
 
 import (
+	"log"
 	"net/http"
-	"strings"
 )
 
 // HandlerFunc 定义了一个函数类型, 用于代表处理HTTP请求的方法
-type HandlerFunc func(w http.ResponseWriter, r *http.Request)
+type HandlerFunc func(c *Context)
+
+type RouteGroup struct {
+	prefix      string        //分组的前缀
+	middlewares []HandlerFunc //作用在这个分组上的中间件
+	parent      *RouteGroup   //父分组,用于支持分组嵌套
+	engine      *Engine       //保存engine,赋予分组访问router的能力
+}
 
 type Engine struct {
-	router map[string]HandlerFunc
+	*RouteGroup
+	router *router
+	groups []*RouteGroup
 }
 
 // ServeHTTP 实现了 http.Handler 接口, 作为 Engine 的实例方法.
 // 受到请求时, 会根据请求路径查找路由映射表 router, 如果查到, 就执行注册的处理方法; 查不到, 就返回 404 NOT FOUND
 // 实现后, Engine 就可以作为一个 HTTP 服务端被启动
 func (e *Engine) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
-	var key strings.Builder
-	key.WriteString(request.Method)
-	key.WriteString("-")
-	key.WriteString(request.URL.Path)
-	if handler, ok := e.router[key.String()]; ok {
-		handler(writer, request)
-	} else {
-		writer.WriteHeader(http.StatusNotFound)
-		_, _ = writer.Write([]byte("404 NOT FOUND: " + request.URL.Path + "\n"))
-	}
+	var c = newContext(writer, request)
+	e.router.handle(c)
 }
 
 // New 是 Engine 的构造函数, 返回一个实例
 func New() *Engine {
-	return &Engine{router: make(map[string]HandlerFunc)}
+	e := &Engine{router: newRouter()}
+	e.RouteGroup = &RouteGroup{engine: e}  //初始化顶层分组
+	e.groups = []*RouteGroup{e.RouteGroup} //将顶层分组加入分组数组
+	return e
 }
 
-// method 是请求的方法, 比如 GET、POST, pattern 是请求的路径, handler 是处理请求的方法
-func (e *Engine) addRoute(method string, pattern string, handler HandlerFunc) {
-	var key strings.Builder // strings.Builder 是 Go 1.10 引入的, 用于高效地构建字符串
-	key.WriteString(method)
-	key.WriteString("-")
-	key.WriteString(pattern)         //优点是可以避免大量内存拷贝, 因为字符串是只读的, 无法直接修改
-	e.router[key.String()] = handler // 将处理方法和路由注册到映射表 router 中
+// Group 创建子分组
+func (group *RouteGroup) Group(prefix string) *RouteGroup {
+	newGroup := &RouteGroup{
+		prefix:      group.prefix + prefix,
+		middlewares: nil,
+		parent:      group,
+		engine:      group.engine,
+	}
+	//加入分组数组
+	group.engine.groups = append(group.engine.groups, newGroup)
+	return newGroup
 }
 
-// GET 定义了添加 GET 请求的方法
-func (e *Engine) GET(pattern string, handler HandlerFunc) {
-	e.addRoute("GET", pattern, handler)
+func (group *RouteGroup) addRoute(method string, comp string, handler HandlerFunc) {
+	pattern := group.prefix + comp //该分组下的路由都有相同前缀
+	log.Printf("Route %4s - %s", method, pattern)
+	group.engine.router.addRoute(method, pattern, handler)
 }
 
-// POST 定义了添加 POST 请求的方法
-func (e *Engine) POST(pattern string, handler HandlerFunc) {
-	e.addRoute("POST", pattern, handler)
+func (group *RouteGroup) GET(pattern string, handler HandlerFunc) {
+	group.addRoute("GET", pattern, handler)
+}
+
+func (group *RouteGroup) POST(pattern string, handler HandlerFunc) {
+	group.addRoute("POST", pattern, handler)
 }
 
 // Run 定义了启动 http 服务的方法
