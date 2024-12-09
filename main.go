@@ -38,6 +38,7 @@ func main() {
 			})
 		})
 	}
+	r.Use(gee.Logger()) //顶层分组的前缀是空字符串,他的中间件会被所有上下文调用
 
 	err := r.Run(":9999")
 	if err != nil {
